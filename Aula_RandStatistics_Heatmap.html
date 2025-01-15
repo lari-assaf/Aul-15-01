@@ -1,0 +1,73 @@
+# Template para Visualização de Dados em Bioinformática
+# Seu Nome
+# 2024-12-11
+
+# Introdução
+# Este documento serve como um template e guia para carregar, normalizar, e visualizar dados,
+# realizando testes estatísticos para análise de dados de bioinformática.
+
+# Carregando Pacotes
+required_packages <- c("dplyr", "reshape2", "ComplexHeatmap", "viridis")
+
+install_if_missing <- function(pkg) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install.packages(pkg)
+  }
+}
+
+invisible(lapply(required_packages, install_if_missing))
+
+library(dplyr)
+library(reshape2)
+library(ComplexHeatmap)
+library(viridis)
+
+# Carregando os Dados
+counts_bowtie_av0 <- read.csv("C:\\Users\\victo\\Downloads\\counts_bowtie_av0.csv")
+metadados_wolb <- read.csv("C:\\Users\\victo\\Downloads\\metadados_wolb.csv")
+wolbs <- read.csv("C:\\Users\\victo\\Downloads\\cepas_de_wolbachia.csv")
+
+# Unindo Tabelas e Preparando Dados
+counts_av0 <- inner_join(counts_bowtie_av0, metadados_wolb, by = "library")
+head(counts_av0)
+
+# Normalização das Contagens em RPM
+counts_av0 <- counts_av0 %>%
+  mutate(RPM = (read_counts / lib_size) * 1e6)
+
+# Ajustando o Identificador da Cepa
+counts_av0$corrected <- sub("NZ_", "", counts_av0$cepa)
+counts_av0 <- inner_join(counts_av0, wolbs, by = c("corrected"="AccessionVersion"))
+
+# Transformando Dados em Matriz
+d_counts_av0 <- dcast(counts_av0, library + tratamento_tetraciclina ~ corrected + Title_reduced, value.var = "RPM")
+
+# Converter em matriz numérica, removendo as colunas de texto
+d_counts_av0_matrix <- as.matrix(d_counts_av0[, c(-1, -2)])
+row.names(d_counts_av0_matrix) <- paste0(d_counts_av0[, 1], "_", d_counts_av0[, 2])
+
+# Visualização: Heatmap
+Heatmap(d_counts_av0_matrix,
+        name = "RPM",
+        row_title = "Bibliotecas de Pequenos RNAs",
+        row_title_gp = gpar(fontsize = 14, fontface = "bold"),
+        row_dend_side = "left",
+        row_names_side = "left",
+        row_names_gp = gpar(fontsize = 10),
+        column_title = "Cepas de Wolbachia",
+        column_title_gp = gpar(fontsize = 10, fontface = "bold"),
+        column_names_gp = gpar(fontsize = 6),
+        col = viridis(100)
+)
+
+# Análise Estatística: Teste ANOVA
+counts_av0$tratamento_tetraciclina <- as.factor(counts_av0$tratamento_tetraciclina)
+anova_result <- aov(RPM ~ tratamento_tetraciclina, data = counts_av0)
+anova_summary <- summary(anova_result)
+anova_summary
+
+# Comentários sobre os Resultados
+# Rejeitamos H0 e concluímos que o tratamento com tetraciclina influencia significativamente os valores médios de RPM.
+
+# Considerações Finais
+# Para complementar este script, examine a documentação do ComplexHeatmap e o pacote Viridis para melhores práticas em visualização de dados.
